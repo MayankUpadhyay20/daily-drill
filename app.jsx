@@ -114,19 +114,83 @@ function DifficultyPicker({ value, onChange }) {
   );
 }
 
-function Header({ streak, date, onArchiveOpen, onLeaderboardOpen }) {
+// ─── Settings drawer ────────────────────────────────────────────────────────
+function SettingsDrawer({ open, onClose, theme, variant, onTheme, onVariant, apiKey, onApiKey }) {
+  return (
+    <div className={`drawer ${open ? "is-open" : ""}`} aria-hidden={!open}>
+      <div className="drawer__scrim" onClick={onClose} />
+      <aside className="drawer__panel settings-drawer__panel" role="dialog" aria-label="Settings">
+        <header className="drawer__head">
+          <h2 className="drawer__title">Settings</h2>
+          <button className="iconbtn iconbtn--ghost" onClick={onClose} type="button" aria-label="Close">
+            <Icon name="close" size={16} />
+          </button>
+        </header>
+        <div className="drawer__body settings-drawer__body">
+
+          <div className="settings-section">
+            <div className="settings-section__title">Appearance</div>
+            <div className="settings-row">
+              <span className="settings-row__label">Theme</span>
+              <div className="settings-seg">
+                {["light", "dark"].map((v) => (
+                  <button key={v} className={`settings-seg__btn ${theme === v ? "is-on" : ""}`}
+                    onClick={() => onTheme(v)} type="button">
+                    {v === "light" ? "Light" : "Dark"}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="settings-row">
+              <span className="settings-row__label">Style</span>
+              <div className="settings-seg">
+                {["calm", "editorial"].map((v) => (
+                  <button key={v} className={`settings-seg__btn ${variant === v ? "is-on" : ""}`}
+                    onClick={() => onVariant(v)} type="button">
+                    {v[0].toUpperCase() + v.slice(1)}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <div className="settings-section">
+            <div className="settings-section__title">AI Questions</div>
+            <p className="settings-section__desc">
+              Paste an Anthropic API key to unlock AI-generated questions. Pick a difficulty below the subject tabs and a fresh question is generated and cached for the day.
+            </p>
+            <div className="settings-row settings-row--col">
+              <span className="settings-row__label">Anthropic API key</span>
+              <input
+                type="password"
+                className="settings-input"
+                placeholder="sk-ant-…"
+                value={apiKey}
+                onChange={(e) => onApiKey(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {apiKey
+                ? <span className="settings-hint settings-hint--ok">Key saved — select Easy / Medium / Hard to generate.</span>
+                : <span className="settings-hint">Get a free key at <a href="https://console.anthropic.com" target="_blank" rel="noopener noreferrer">console.anthropic.com</a></span>
+              }
+            </div>
+          </div>
+
+        </div>
+      </aside>
+    </div>
+  );
+}
+
+function Header({ streak, date, onArchiveOpen, onLeaderboardOpen, onSettingsOpen }) {
   return (
     <header className="app__header">
       <div className="brand">
         <div className="brand__mark" aria-hidden="true">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
             <circle cx="10" cy="10" r="8.5" stroke="currentColor" strokeWidth="1.4" />
-            <path
-              d="M10 4.5v5.5l3.5 2"
-              stroke="currentColor"
-              strokeWidth="1.4"
-              strokeLinecap="round"
-            />
+            <path d="M10 4.5v5.5l3.5 2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
           </svg>
         </div>
         <div className="brand__text">
@@ -141,24 +205,16 @@ function Header({ streak, date, onArchiveOpen, onLeaderboardOpen }) {
           <span className="streak__num">{streak}</span>
           <span className="streak__lbl">day streak</span>
         </div>
-        <button
-          className="iconbtn iconbtn--ghost"
-          onClick={onLeaderboardOpen}
-          type="button"
-          aria-label="Leaderboard"
-        >
+        <button className="iconbtn iconbtn--ghost" onClick={onLeaderboardOpen} type="button" aria-label="Leaderboard">
           <svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round">
-            <path d="M6 9h2v8H6zM9 5h2v12H9zM12 12h2v5h-2z" />
-            <path d="M3 17h14" strokeLinecap="round" />
+            <path d="M6 9h2v8H6zM9 5h2v12H9zM12 12h2v5h-2z" /><path d="M3 17h14" strokeLinecap="round" />
           </svg>
         </button>
-        <button
-          className="iconbtn iconbtn--ghost"
-          onClick={onArchiveOpen}
-          type="button"
-          aria-label="Past questions"
-        >
+        <button className="iconbtn iconbtn--ghost" onClick={onArchiveOpen} type="button" aria-label="Past questions">
           <Icon name="archive" size={16} />
+        </button>
+        <button className="iconbtn iconbtn--ghost" onClick={onSettingsOpen} type="button" aria-label="Settings">
+          <Icon name="sliders" size={16} />
         </button>
       </div>
     </header>
@@ -312,6 +368,7 @@ function App() {
 
   const [active, setActive] = useState("physics");
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [practiceSubject, setPracticeSubject] = useState(null);
   const [leaderboardOpen, setLeaderboardOpen] = useState(false);
   const [pyqPayload, setPyqPayload] = useState(null);
@@ -416,6 +473,7 @@ function App() {
         date={prettyDate(new Date(Date.now() - seedOffset * 86400000))}
         onArchiveOpen={() => setArchiveOpen(true)}
         onLeaderboardOpen={() => setLeaderboardOpen(true)}
+        onSettingsOpen={() => setSettingsOpen(true)}
       />
 
       <main className="app__main">
@@ -504,47 +562,16 @@ function App() {
 
       <Toast message={toast.msg} visible={toast.visible} />
 
-      <TweaksPanel title="Tweaks">
-        <TweakSection label="Appearance">
-          <TweakRadio
-            label="Theme"
-            value={t.theme}
-            onChange={(v) => setTweak("theme", v)}
-            options={[
-              { value: "light", label: "Light" },
-              { value: "dark", label: "Dark" },
-            ]}
-          />
-          <TweakRadio
-            label="Style"
-            value={t.variant}
-            onChange={(v) => setTweak("variant", v)}
-            options={[
-              { value: "calm", label: "Calm" },
-              { value: "editorial", label: "Editorial" },
-            ]}
-          />
-        </TweakSection>
-        <TweakSection label="AI Questions">
-          <div className="twk-row">
-            <div className="twk-lbl"><span>Anthropic API key</span></div>
-            <input
-              type="password"
-              className="twk-field"
-              placeholder="sk-ant-…"
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-              autoComplete="off"
-              spellCheck={false}
-            />
-            <div style={{fontSize:"10px",color:"rgba(41,38,27,.5)",marginTop:"4px",lineHeight:"1.5"}}>
-              {apiKey
-                ? "Key saved · select a difficulty above to generate."
-                : "Get a free key at console.anthropic.com — enables AI-generated questions."}
-            </div>
-          </div>
-        </TweakSection>
-      </TweaksPanel>
+      <SettingsDrawer
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        theme={t.theme}
+        variant={t.variant}
+        onTheme={(v) => setTweak("theme", v)}
+        onVariant={(v) => setTweak("variant", v)}
+        apiKey={apiKey}
+        onApiKey={setApiKey}
+      />
     </div>
   );
 }
