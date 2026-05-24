@@ -49,6 +49,71 @@ function useStreak() {
   return data.streak || 1;
 }
 
+// ─── AI question generation via Anthropic API ────────────────────────────────
+async function generateQuestion(apiKey, subject, difficulty) {
+  const subjectMap = { physics: "Physics", chemistry: "Chemistry", math: "Mathematics" };
+  const subjectFull = subjectMap[subject];
+  const ts = Date.now();
+
+  const prompt = `You are a CBSE Class 11 & 12 exam question setter for ${subjectFull}.
+
+Generate ONE original ${difficulty}-level multiple-choice question from the CBSE syllabus.
+
+Respond with ONLY a valid JSON object — no markdown fences, no extra text:
+
+{"id":"gen-${subject}-${ts}","cls":"XI or XII","chapter":"chapter name from CBSE syllabus","difficulty":"${difficulty}","question":"question with $..$ inline LaTeX and $$..$$ display LaTeX","options":["option A","option B","option C","option D"],"correct":0,"hints":["hint 1","hint 2","hint 3"],"solution":"step-by-step solution with LaTeX","concept":"one paragraph explaining the underlying concept"}`;
+
+  const res = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "anthropic-dangerous-direct-browser-access": "true",
+    },
+    body: JSON.stringify({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1500,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error(err?.error?.message || `HTTP ${res.status}`);
+  }
+
+  const data = await res.json();
+  const raw = data.content[0].text.trim().replace(/^```json?\n?/, "").replace(/\n?```$/, "");
+  return JSON.parse(raw);
+}
+
+// ─── Difficulty picker ───────────────────────────────────────────────────────
+const DIFF_LEVELS = [
+  { id: "Easy",   color: "oklch(0.62 0.13 145)" },
+  { id: "Medium", color: "oklch(0.65 0.14 72)"  },
+  { id: "Hard",   color: "oklch(0.6 0.18 25)"   },
+];
+
+function DifficultyPicker({ value, onChange }) {
+  return (
+    <div className="diff-picker" role="group" aria-label="Select difficulty">
+      <span className="diff-picker__label">Difficulty</span>
+      {DIFF_LEVELS.map((l) => (
+        <button
+          key={l.id}
+          className={`diff-pick-btn ${value === l.id ? "is-on" : ""}`}
+          style={{ "--pick-clr": l.color }}
+          onClick={() => onChange(value === l.id ? null : l.id)}
+          type="button"
+        >
+          {l.id}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function Header({ streak, date, onArchiveOpen, onLeaderboardOpen }) {
   return (
     <header className="app__header">
@@ -253,6 +318,12 @@ function App() {
   const [toast, setToast] = useState({ msg: "", visible: false });
   const toastT = useRef(null);
 
+  // AI question generation
+  const [difficulty, setDifficulty] = usePersistedState("daily:difficulty", null);
+  const [apiKey, setApiKey] = usePersistedState("daily:apikey", "");
+  const [genQ, setGenQ] = useState(null);
+  const [genState, setGenState] = useState("idle"); // idle | loading | error
+
   const streak = useStreak();
 
   const showToast = (msg) => {
@@ -280,7 +351,43 @@ function App() {
     });
   };
 
-  const q = bank[active][seed % bank[active].length];
+  // Static bank question — filtered by difficulty when no API key
+  const bankQ = useMemo(() => {
+    const qs = bank[active];
+    if (difficulty && !apiKey) {
+      const filtered = qs.filter((q) => q.difficulty === difficulty);
+      if (filtered.length) return filtered[seed % filtered.length];
+    }
+    return qs[seed % qs.length];
+  }, [active, seed, difficulty, apiKey]);
+
+  // AI generation — cache per day+subject+difficulty, skip in archive mode
+  const genCacheKey = `gen:${ymd()}:${active}:${difficulty}`;
+  useEffect(() => {
+    if (!difficulty || !apiKey || !isToday) {
+      setGenQ(null);
+      setGenState("idle");
+      return;
+    }
+    try {
+      const cached = localStorage.getItem(genCacheKey);
+      if (cached) { setGenQ(JSON.parse(cached)); setGenState("idle"); return; }
+    } catch {}
+    setGenQ(null);
+    setGenState("loading");
+    let cancelled = false;
+    generateQuestion(apiKey, active, difficulty)
+      .then((q) => {
+        if (cancelled) return;
+        setGenQ(q);
+        setGenState("idle");
+        try { localStorage.setItem(genCacheKey, JSON.stringify(q)); } catch {}
+      })
+      .catch(() => { if (!cancelled) setGenState("error"); });
+    return () => { cancelled = true; };
+  }, [active, difficulty, apiKey, isToday, genCacheKey]);
+
+  const q = isToday && genQ ? genQ : bankQ;
 
   const handleShare = () => {
     const url = window.location.href;
@@ -326,6 +433,21 @@ function App() {
         )}
 
         <SubjectTabs active={active} onChange={setActive} />
+
+        <DifficultyPicker value={difficulty} onChange={setDifficulty} />
+
+        {genState === "loading" && (
+          <div className="gen-banner gen-banner--loading">
+            <span className="gen-spinner" aria-hidden="true" />
+            <span>Generating your {difficulty?.toLowerCase()} {active} question…</span>
+          </div>
+        )}
+        {genState === "error" && (
+          <div className="gen-banner gen-banner--error">
+            <Icon name="cross" size={14} />
+            <span>Couldn't generate — check your API key in Tweaks. Showing a question from the bank.</span>
+          </div>
+        )}
 
         <QuestionCard
           key={`${active}:${q.id}:${seedOffset}`}
@@ -402,6 +524,25 @@ function App() {
               { value: "editorial", label: "Editorial" },
             ]}
           />
+        </TweakSection>
+        <TweakSection label="AI Questions">
+          <div className="twk-row">
+            <div className="twk-lbl"><span>Anthropic API key</span></div>
+            <input
+              type="password"
+              className="twk-field"
+              placeholder="sk-ant-…"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              autoComplete="off"
+              spellCheck={false}
+            />
+            <div style={{fontSize:"10px",color:"rgba(41,38,27,.5)",marginTop:"4px",lineHeight:"1.5"}}>
+              {apiKey
+                ? "Key saved · select a difficulty above to generate."
+                : "Get a free key at console.anthropic.com — enables AI-generated questions."}
+            </div>
+          </div>
         </TweakSection>
       </TweaksPanel>
     </div>
