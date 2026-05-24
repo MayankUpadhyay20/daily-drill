@@ -223,12 +223,8 @@ button {
 /* ───── Tabs ───── */
 .tabs {
   display: flex;
-  gap: 4px;
+  gap: 8px;
   margin-bottom: 24px;
-  padding: 4px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 14px;
   width: fit-content;
 }
 .tab {
@@ -236,21 +232,23 @@ button {
   align-items: center;
   gap: 8px;
   padding: 8px 16px;
-  background: transparent;
-  border: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
   font-size: 13.5px;
   font-weight: 500;
   color: var(--muted);
   cursor: pointer;
-  transition: color 0.15s, background 0.18s;
+  transition: color 0.15s, background 0.18s, border-color 0.18s, box-shadow 0.18s;
 }
 .tab:hover {
   color: var(--text);
+  border-color: var(--border-strong);
 }
 .tab.is-active {
   background: var(--acc-soft);
   color: var(--acc);
-  box-shadow: 0 0 0 1.5px var(--acc) inset;
+  border-color: var(--acc);
+  box-shadow: 0 0 0 3px oklch(from var(--acc) l c h / 0.12);
 }
 
 /* Physics — round pill, circle dot */
