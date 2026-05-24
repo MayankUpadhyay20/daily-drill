@@ -24,8 +24,9 @@ function HintCard({ index, text, revealed, onReveal }) {
 }
 
 function Timer({ seconds, running, onToggle, onReset }) {
+  const urgency = seconds < 300 ? "green" : "amber";
   return (
-    <div className="timer" role="timer" aria-label="solving time">
+    <div className="timer" data-urgency={urgency} role="timer" aria-label="solving time">
       <button
         className="timer__btn"
         onClick={onToggle}
@@ -281,7 +282,7 @@ function PYQSection({ pyqs, storageKey, onOpen, subject, parentQ }) {
         onClick={() => setOpen((v) => !v)}
       >
         <span>
-          {open ? "Hide JEE Main PYQs" : `Related JEE Main PYQs · ${pyqs.length}`}
+          {open ? "Hide PYQs" : `Want to attempt PYQs? · ${pyqs.length}`}
         </span>
         <Icon name="chevron" size={14} className={open ? "is-open" : ""} />
       </button>
