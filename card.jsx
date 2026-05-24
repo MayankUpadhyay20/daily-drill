@@ -96,15 +96,12 @@ function QuestionCard({
     // eslint-disable-next-line
   }, [q.id]);
 
-  // Fire onAnswer once per pick. Initialise the "last reported" key from the
-  // initial picked value so a page reload (where picked is hydrated from
-  // localStorage) doesn't re-fire onAnswer and double-count attempts.
-  const lastReportedRef = useRef(picked !== null ? `${q.id}:${picked}` : null);
+  // Fire onAnswer only once per question (first pick), not on every retry.
+  const lastReportedRef = useRef(picked !== null ? q.id : null);
   useEffect(() => {
     if (picked === null) return;
-    const key = `${q.id}:${picked}`;
-    if (lastReportedRef.current === key) return;
-    lastReportedRef.current = key;
+    if (lastReportedRef.current === q.id) return;
+    lastReportedRef.current = q.id;
     onAnswer && onAnswer(subject, q.id, picked === q.correct);
   }, [picked, q.id, q.correct, subject]);
 
@@ -113,15 +110,18 @@ function QuestionCard({
     lastReportedRef.current = null;
   }, [q.id]);
 
+  const correctlyAnswered = picked === q.correct;
+
   const optionState = (i) => {
     if (picked === null) return "idle";
-    if (i === q.correct) return "correct";
+    if (correctlyAnswered) {
+      if (i === q.correct) return "correct";
+      return "revealed";
+    }
+    // Wrong pick — only mark the chosen option, don't reveal the correct one
     if (i === picked) return "wrong";
-    return "revealed";
+    return "idle";
   };
-
-  const correctlyAnswered = picked === q.correct;
-  const wrongAnswered = picked !== null && picked !== q.correct;
 
   const revealNextHint = () =>
     setRevealedHints((n) => Math.min(n + 1, q.hints.length));
@@ -160,8 +160,8 @@ function QuestionCard({
             label={String.fromCharCode(65 + i)}
             content={opt}
             state={optionState(i)}
-            onClick={() => picked === null && setPicked(i)}
-            disabled={picked !== null}
+            onClick={() => !correctlyAnswered && setPicked(i)}
+            disabled={correctlyAnswered}
           />
         ))}
       </div>
@@ -174,17 +174,8 @@ function QuestionCard({
           <span>
             {correctlyAnswered
               ? "Correct. Nice work."
-              : "Not quite — read the concept and try the next one tomorrow."}
+              : "Not quite — try a different option."}
           </span>
-          {wrongAnswered && (
-            <button
-              className="feedback__retry"
-              type="button"
-              onClick={() => setPicked(null)}
-            >
-              Try again
-            </button>
-          )}
         </div>
       )}
 

@@ -45,19 +45,26 @@ function PracticeQuestion({ q, subject, onAnswer }) {
   const [picked, setPicked] = useState(null);
   const [hintIdx, setHintIdx] = useState(0);
   const [solOpen, setSolOpen] = useState(false);
+  const reportedRef = _useRef(false);
 
   // Reset on question change
   useEffect(() => {
     setPicked(null);
     setHintIdx(0);
     setSolOpen(false);
+    reportedRef.current = false;
   }, [q.id]);
+
+  const solved = picked === q.correct;
 
   const optState = (i) => {
     if (picked === null) return "idle";
-    if (i === q.correct) return "correct";
+    if (solved) {
+      if (i === q.correct) return "correct";
+      return "revealed";
+    }
     if (i === picked) return "wrong";
-    return "revealed";
+    return "idle";
   };
 
   return (
@@ -80,11 +87,14 @@ function PracticeQuestion({ q, subject, onAnswer }) {
             content={opt}
             state={optState(i)}
             onClick={() => {
-              if (picked !== null) return;
+              if (solved) return;
               setPicked(i);
-              onAnswer(i === q.correct);
+              if (!reportedRef.current) {
+                reportedRef.current = true;
+                onAnswer(i === q.correct);
+              }
             }}
-            disabled={picked !== null}
+            disabled={solved}
           />
         ))}
       </div>
